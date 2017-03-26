@@ -1,0 +1,100 @@
+---
+title: "Practical machine learning Assignment"
+author: "Anudeep M"
+date: "March 26, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction:
+
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants,who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+
+```{r,cache=TRUE}
+library(caret)
+
+df=read.csv('pml-training.csv')
+dim(df)
+barchart(df$classe)
+```
+
+The training data consists of 19622 observations and 160 variables.
+This is high dimensional data to implement a "random Forest" classification on the data. The variables that are not useful for analysis are removed and the all the measurement variables are converted to  numeric data type to make sure data types of the measurements are correct.
+
+```{r,cache=TRUE}
+df[,c(1,2,3,4,5,6,7)]=NULL
+for(i in seq(1,152)){
+
+    df[,i]=as.numeric(df[,i])
+}
+```
+
+The test data has been loaded and the same data manipulation as performed on the training data is performed on the test dataset.
+
+```{r,cache=TRUE}
+test=read.csv("pml-testing.csv")
+dim(test)
+test[,c(1,2,3,4,5,6,7)]=NULL
+for(i in seq(1,152)){
+    
+    test[,i]=as.numeric(test[,i])
+}
+```
+
+By trying out different ways to handle "NA's", it was found that the best way to get result was to remove columns/variables from both the training and testing datasets which have no "NA" values.
+
+```{r,cache=TRUE}
+x=colSums(is.na(df))
+y=colSums(is.na(test))
+newdf=df[,(x==0 & y==0)]
+newtest=test[,(x==0 & y==0)]
+dim(newdf)
+dim(newtest)
+```
+
+Finally, the dimensionality has been reduced to 53 variables from initial 160 varibales of which the "classe" is the variables to be predicted. The variables used are:
+
+```{r,cache=TRUE}
+names(newdf)
+```
+
+Since this is a very large data set to perform a "random Forest" classication algorithm with a 10-fold cross-validation, the power of parallel Programming is leveraged upon.
+
+```{r,cache=TRUE}
+library(parallel)
+library(doParallel)
+cluster=makeCluster(detectCores()-1) ## leaving one for OS
+registerDoParallel(cluster)
+
+## Cross-validation with 10 folds
+fitcontrol=trainControl(method="cv",number=10,allowParallel = TRUE) 
+## training "randomForest" model
+##model=train(classe~.,data=df,method="rf",trControl=fitcontrol,na.action = na.roughfix)
+model=train(classe~.,data=newdf,method="rf",trControl=fitcontrol)
+## Stopping the cluster
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+
+After training the "random Forest" model with 10-fold cross-validation named "model" and stopping the cluster, the model is used to predict the "classe" variable on the test data "newtest". Also the confusion  matrix is built on the training data.
+
+```{r,cache=TRUE}
+predtrain=predict(model,newdata=newdf)
+confusionMatrix(predtrain,newdf$classe)
+
+pred=predict(model,newdata=test)
+pred
+```
+
+## Summary:
+From the results, we expect the cross-validation to result in a vey minimal out-of-sample error and good accuracy.
